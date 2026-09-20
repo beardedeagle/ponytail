@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# CLAUDE_CONFIG_DIR overrides ~/.claude, matching where the hooks write the flag (issue #34)
-flag="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.ponytail-active"
+# Where the flag lives: an explicit first argument (ponytail-activate.js embeds
+# it for hosts that keep state outside ~/.claude, e.g. Qwen's ~/.qwen), then
+# CLAUDE_CONFIG_DIR, then ~/.claude — matching where the hooks write it (#34).
+state_dir="${1:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}"
+flag="$state_dir/.ponytail-active"
 [ -f "$flag" ] || exit 0
 
 mode=$(head -n1 "$flag" | tr -d '[:space:]')

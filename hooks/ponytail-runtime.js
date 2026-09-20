@@ -27,6 +27,14 @@ const isQoder = !isCopilot && !isCodex && Boolean(process.env.QODER_SESSION_ID);
 // hooks next to CLAUDE_PLUGIN_ROOT, and it needs Cursor-shaped JSON either
 // way, so this check comes after the hosts with their own data dirs.
 const isCursor = !isCopilot && !isCodex && !isQoder && Boolean(process.env.CURSOR_VERSION);
+// Qwen Code exports QWEN_CODE=1 from the CLI process itself, so hook children
+// and the statusline command both inherit it. QWEN_PROJECT_DIR would be the
+// wrong signal: only hook children receive it, so the statusline would read a
+// different state dir than the hooks write. Qwen expands neither
+// CLAUDE_PLUGIN_ROOT nor PLUGIN_DATA, so it needs its own dir; ~/.qwen follows
+// the Qoder and Cursor precedent.
+const isQwen = !isCopilot && !isCodex && !isQoder && !isCursor &&
+  Boolean(process.env.QWEN_CODE);
 
 let stateDir = getClaudeDir();
 if (isCodex) stateDir = process.env.PLUGIN_DATA;
@@ -35,6 +43,7 @@ if (isCodex) stateDir = process.env.PLUGIN_DATA;
 if (isCopilot) stateDir = process.env.COPILOT_PLUGIN_DATA || getClaudeDir();
 if (isQoder) stateDir = path.join(os.homedir(), '.qoder');
 if (isCursor) stateDir = path.join(os.homedir(), '.cursor');
+if (isQwen) stateDir = path.join(os.homedir(), '.qwen');
 
 const statePath = path.join(stateDir, STATE_FILE);
 
@@ -120,8 +129,9 @@ function writeHookOutput(event, mode, context = '') {
     process.stdout.write(JSON.stringify(output));
     return;
   }
-  // Native Claude: SessionStart accepts raw stdout, but SubagentStart needs the
-  // hookSpecificOutput JSON form or the context is dropped.
+  // Native Claude, and Qwen Code, which has the same contract: SessionStart and
+  // UserPromptSubmit take raw stdout into the model context, but SubagentStart
+  // needs the hookSpecificOutput JSON form or the context is dropped.
   if (event === 'SubagentStart') {
     process.stdout.write(JSON.stringify(
       { hookSpecificOutput: { hookEventName: event, additionalContext: context } }));
@@ -138,7 +148,9 @@ module.exports = {
   isCopilot,
   isCursor,
   isQoder,
+  isQwen,
   readMode,
   setMode,
+  stateDir,
   writeHookOutput,
 };

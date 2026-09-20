@@ -41,6 +41,10 @@ delete process.env.QODER_SESSION_ID;
 // hook would otherwise steer every case into the Cursor JSON branch (#817).
 delete process.env.CURSOR_VERSION;
 delete process.env.CURSOR_PROJECT_DIR;
+// Qwen Code exports QWEN_CODE process-wide rather than only to hook processes,
+// so a suite launched from inside a Qwen session — the normal way to run it —
+// would otherwise steer every native-Claude case into the ~/.qwen state dir.
+delete process.env.QWEN_CODE;
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'ponytail-hooks-'));
 // Runs on normal exit and on assertion-throw exit; force makes it idempotent.

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // ponytail — Claude Code SessionStart activation hook (also Codex, Copilot,
-// Grok and Cursor sessionStart)
+// Grok, Cursor and Qwen Code sessionStart)
 //
 // Runs on every session start:
-//   1. Writes flag file at $CLAUDE_CONFIG_DIR/.ponytail-active (defaults to ~/.claude; statusline reads this)
+//   1. Writes flag file at $CLAUDE_CONFIG_DIR/.ponytail-active (defaults to
+//      ~/.claude, or ~/.qwen under Qwen Code; statusline reads this)
 //   2. Emits ponytail ruleset as hidden SessionStart context
 //   3. Detects missing statusline config and emits setup nudge
 
@@ -18,19 +19,28 @@ const {
   isCodex,
   isCopilot,
   isCursor,
+  isQwen,
   setMode,
+  stateDir,
   writeHookOutput,
 } = require('./ponytail-runtime');
 
 const claudeDir = getClaudeDir();
-const settingsPath = path.join(claudeDir, 'settings.json');
+// Qwen reads its settings — and its statusLine, nested under "ui" — from
+// ~/.qwen/settings.json, which is also where its hooks keep the mode flag.
+// Qoder stays on the Claude path: it has no verified settings-file contract,
+// and guessing one would be worse than the status quo.
+const settingsDir = isQwen ? stateDir : claudeDir;
+const settingsPath = path.join(settingsDir, 'settings.json');
 
 const mode = getDefaultMode();
 
 // "off" mode — skip activation entirely, don't write flag or emit rules
 if (mode === 'off') {
   clearMode();
-  const hookOutput = (isCodex || isCopilot || isCursor) ? '' : 'OK';
+  // Qwen adds a command hook's raw stdout to the model context, so a bare "OK"
+  // would land as context noise rather than reading as an acknowledgement.
+  const hookOutput = (isCodex || isCopilot || isCursor || isQwen) ? '' : 'OK';
   writeHookOutput('SessionStart', 'off', hookOutput);
   process.exit(0);
 }
@@ -67,7 +77,8 @@ if (!isCodex && !isCopilot && !isCursor) try {
     // Strip UTF-8 BOM some editors prepend on Windows (breaks JSON.parse)
     const raw = fs.readFileSync(settingsPath, 'utf8').replace(/^\uFEFF/, '');
     const settings = JSON.parse(raw);
-    if (settings.statusLine) {
+    // Qwen nests it: { "ui": { "statusLine": { ... } } }
+    if (isQwen ? settings.ui && settings.ui.statusLine : settings.statusLine) {
       hasStatusline = true;
     }
   }
@@ -75,18 +86,26 @@ if (!isCodex && !isCopilot && !isCursor) try {
   // Nudge at most once — the flag file marks that the user has already seen
   // (and implicitly declined) the statusline setup offer. Repeating it every
   // session start turns a helpful hint into a nag.
-  const nudgeFlagPath = path.join(claudeDir, '.ponytail-statusline-nudged');
+  const nudgeFlagPath = path.join(settingsDir, '.ponytail-statusline-nudged');
   if (!hasStatusline && !fs.existsSync(nudgeFlagPath)) {
     try { fs.writeFileSync(nudgeFlagPath, ''); } catch (e) { /* best-effort */ }
     const isWindows = process.platform === 'win32';
     const scriptName = isWindows ? 'ponytail-statusline.ps1' : 'ponytail-statusline.sh';
     const scriptPath = path.join(__dirname, scriptName);
-    if (isShellSafe(scriptPath)) {
-      const command = isWindows
+    // Hosts that keep the flag outside ~/.claude (Qwen) get their state dir
+    // passed explicitly, so the badge reads what the hooks wrote. An argument
+    // behaves the same on both platforms and does not depend on the statusline
+    // child inheriting host env vars. No argument means the old default, so
+    // already-configured installs keep working.
+    const stateArg = stateDir === claudeDir ? '' : ` "${stateDir}"`;
+    if (isShellSafe(scriptPath) && (!stateArg || isShellSafe(stateDir))) {
+      const command = (isWindows
         ? `powershell -ExecutionPolicy Bypass -File "${scriptPath}"`
-        : `bash "${scriptPath}"`;
-      const statusLineSnippet =
-        '"statusLine": { "type": "command", "command": ' + JSON.stringify(command) + ' }';
+        : `bash "${scriptPath}"`) + stateArg;
+      // Qwen's statusLine lives under "ui", not at the top level.
+      const statusLineSnippet = isQwen
+        ? '"ui": { "statusLine": { "type": "command", "command": ' + JSON.stringify(command) + ' } }'
+        : '"statusLine": { "type": "command", "command": ' + JSON.stringify(command) + ' }';
       output += "\n\n" +
         "STATUSLINE SETUP NEEDED: The ponytail plugin includes a statusline badge showing active mode " +
         "(e.g. [PONYTAIL], [PONYTAIL:ULTRA]). It is not configured yet. " +
@@ -94,12 +113,13 @@ if (!isCodex && !isCopilot && !isCursor) try {
         statusLineSnippet + " " +
         "Proactively offer to set this up for the user on first interaction.";
     } else {
-      // ponytail: install path has shell metacharacters — don't embed it in a
-      // command snippet; have the agent wire it up by hand instead.
+      // ponytail: install path or state dir has shell metacharacters — don't
+      // embed it in a command snippet; have the agent wire it up by hand instead.
       output += "\n\n" +
         "STATUSLINE SETUP NEEDED: The ponytail plugin includes a statusline badge showing active mode. " +
-        "Its install path contains characters unsafe to embed in a shell command, so configure it manually: " +
+        "Its install path or state directory contains characters unsafe to embed in a shell command, so configure it manually: " +
         "add a statusLine command of type \"command\" that runs " + scriptName +
+        (stateArg ? " with " + stateDir + " as its first argument" : "") +
         " from the plugin's hooks directory to " + settingsPath + ", quoting/escaping the path for your shell. " +
         "Proactively offer to set this up for the user on first interaction.";
     }

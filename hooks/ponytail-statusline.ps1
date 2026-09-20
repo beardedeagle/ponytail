@@ -1,6 +1,11 @@
-# CLAUDE_CONFIG_DIR overrides ~/.claude, matching where the hooks write the flag (issue #34)
-$ClaudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
-$Flag = Join-Path $ClaudeDir ".ponytail-active"
+param([string]$StateDir)
+# Where the flag lives: an explicit argument (ponytail-activate.js embeds it for
+# hosts that keep state outside ~/.claude, e.g. Qwen's ~/.qwen), then
+# CLAUDE_CONFIG_DIR, then ~/.claude — matching where the hooks write it (#34).
+if ([string]::IsNullOrEmpty($StateDir)) {
+    $StateDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
+}
+$Flag = Join-Path $StateDir ".ponytail-active"
 if (-not (Test-Path $Flag)) {
     exit 0
 }

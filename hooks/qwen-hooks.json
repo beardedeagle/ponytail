@@ -1,0 +1,42 @@
+{
+  "_comment": "Reference template — copy the 'hooks' object into ~/.qwen/settings.json (or .qwen/settings.json for one project), merging with any hooks already there. The commands assume the standard extension install location and need no editing; Qwen runs them through a shell, so $HOME expands. Point them at a checkout instead only if you are developing the hooks. Qwen Code expands neither ${CLAUDE_PLUGIN_ROOT} nor ${PLUGIN_DATA}, so the path has to be literal. 'timeout' is in seconds — Qwen reads a value of 1000 or more as legacy milliseconds. Qwen has no extension-manifest hooks field, which is why this is a settings.json template rather than a plugin-declared hook map.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.qwen/extensions/ponytail/hooks/ponytail-activate.js\"",
+            "timeout": 5,
+            "statusMessage": "Loading ponytail mode..."
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.qwen/extensions/ponytail/hooks/ponytail-subagent.js\"",
+            "timeout": 5,
+            "statusMessage": "Loading ponytail mode..."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.qwen/extensions/ponytail/hooks/ponytail-mode-tracker.js\"",
+            "timeout": 5,
+            "statusMessage": "Tracking ponytail mode..."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -55,6 +55,21 @@ fs.writeFileSync(cursorHooksPath, JSON.stringify({
   },
 }));
 
+// Qwen: the mode flag and the nested ui.statusLine entry go too, while sibling
+// keys under "ui" and unrelated settings survive.
+const qwenDir = path.join(home, '.qwen');
+fs.mkdirSync(qwenDir, { recursive: true });
+const qwenFlagPath = path.join(qwenDir, '.ponytail-active');
+fs.writeFileSync(qwenFlagPath, 'ultra');
+const qwenSettingsPath = path.join(qwenDir, 'settings.json');
+fs.writeFileSync(qwenSettingsPath, JSON.stringify({
+  ui: {
+    statusLine: { type: 'command', command: 'bash /p/ponytail-statusline.sh "/home/u/.qwen"' },
+    theme: 'dark',
+  },
+  model: { name: 'qwen3.8-max' },
+}));
+
 const env = {
   HOME: home,
   USERPROFILE: home,
@@ -77,6 +92,20 @@ assert.equal(
   settingsAfter.statusLine,
   undefined,
   'ponytail statusLine entry must be removed',
+);
+
+assert.equal(fs.existsSync(qwenFlagPath), false, 'Qwen mode flag must be removed');
+const qwenSettingsAfter = JSON.parse(fs.readFileSync(qwenSettingsPath, 'utf8'));
+assert.equal(
+  qwenSettingsAfter.ui.statusLine,
+  undefined,
+  'ponytail ui.statusLine entry must be removed from ~/.qwen/settings.json',
+);
+assert.equal(qwenSettingsAfter.ui.theme, 'dark', 'sibling keys under ui must survive');
+assert.equal(
+  qwenSettingsAfter.model.name,
+  'qwen3.8-max',
+  'unrelated Qwen settings must survive',
 );
 
 // A user's own, unrelated statusLine must survive untouched.
